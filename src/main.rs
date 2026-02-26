@@ -11,7 +11,6 @@ fn main() {
     let path = "Broadway_tower_edit.jpg".to_string();
 
     let mut image = Image::load_image(&path).expect("Failed to load image");
-    image.resize(image.width/2, image.height/2);
     image.set_format(PixelFormat::PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
 
     let (mut rl, thread) = raylib::init()
@@ -20,7 +19,7 @@ fn main() {
         .title("Seam Carving - Resize Window | Press S to Save")
         .build();
 
-    let texture = rl.load_texture_from_image(&thread, &image).unwrap();
+    let mut texture = rl.load_texture_from_image(&thread, &image).unwrap();
 
     while !rl.window_should_close() {
         if rl.is_key_pressed(KeyboardKey::KEY_S) {
@@ -30,11 +29,16 @@ fn main() {
 
         if rl.is_key_pressed(KeyboardKey::KEY_C) {
             println!("Begin Carving");
-            let mut back_image = image.clone();
-            sobel_filter(&mut back_image);
-            let dp = compute_dp(&back_image);
-            let seam = backtrack_seam(&dp, back_image.width, back_image.height);
-            remove_seam(&mut image, &seam);
+            for _ in 0..60 {
+                let mut back_image = image.clone();
+                sobel_filter(&mut back_image);
+                let dp = compute_dp(&back_image);
+                let seams = backtrack_seam(&dp, back_image.width, back_image.height);
+                for seam in seams {
+                    remove_seam(&mut image, &seam);
+                }
+            }
+            texture = rl.load_texture_from_image(&thread, &image).unwrap();
             println!("End Carving");
         }
 
@@ -93,46 +97,47 @@ fn compute_dp(image: &Image) -> Vec<u32> {
     dp.to_vec()
 }
 
-fn backtrack_seam(dp: &[u32], w: i32, h: i32) -> Vec<usize> {
+fn backtrack_seam(dp: &[u32], w: i32, h: i32) -> Vec<Vec<usize>> {
     let w = w as usize;
     let h = h as usize;
 
-    let mut seam = vec![0usize; h];
+    let mut seams = vec![vec![0usize; h]; 10];
 
-    let mut min_x = 0;
-    let mut min_val = dp[(h - 1) * w];
+    for seam in seams.iter_mut() {
+        let mut min_x = 0;
+        let mut min_val = dp[(h - 1) * w];
 
-    for x in 1..w {
-        let val = dp[(h - 1) * w + x];
-        if val < min_val {
-            min_val = val;
-            min_x = x;
-        }
-    }
-
-    seam[h - 1] = min_x;
-
-    for y in (0..h - 1).rev() {
-        let prev_x = seam[y + 1];
-
-        let mut best_x = prev_x;
-        let mut best_val = dp[y * w + prev_x];
-
-        for dx in [-1isize, 0, 1] {
-            let nx = prev_x as isize + dx;
-            if nx >= 0 && (nx as usize) < w {
-                let val = dp[y * w + nx as usize];
-                if val < best_val {
-                    best_val = val;
-                    best_x = nx as usize;
-                }
+        for x in 1..w {
+            let val = dp[(h - 1) * w + x];
+            if val < min_val {
+                min_val = val;
+                min_x = x;
             }
         }
 
-        seam[y] = best_x;
-    }
+        (*seam)[h - 1] = min_x;
 
-    seam
+        for y in (0..h - 1).rev() {
+            let prev_x = seam[y + 1];
+
+            let mut best_x = prev_x;
+            let mut best_val = dp[y * w + prev_x];
+
+            for dx in [-1isize, 0, 1] {
+                let nx = prev_x as isize + dx;
+                if nx >= 0 && (nx as usize) < w {
+                    let val = dp[y * w + nx as usize];
+                    if val < best_val {
+                        best_val = val;
+                        best_x = nx as usize;
+                    }
+                }
+            }
+
+            seam[y] = best_x;
+        }
+    }
+    seams
 }
 
 fn remove_seam(image: &mut Image, seam: &[usize]) {
