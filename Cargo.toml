@@ -4,5 +4,5 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-raylib = { path = "../raylib-rs", version = "0.1.0" }
-# raylib = { git = "https://github.com/MarcosAndradeV/raylib-rs", version = "0.1.0" }
+# raylib = { path = "../raylib-rs", version = "0.1.0" }
+raylib = { git = "https://github.com/MarcosAndradeV/raylib-rs", version = "0.1.0" }

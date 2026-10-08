@@ -54,6 +54,24 @@ fn main() {
                 }
             }
 
+            if is_key_pressed(KEY_D) {
+                if image.width > 2 {
+                    for _ in 0..seams_to_remove {
+                        let energy = compute_energy(&image);
+                        let dp = compute_dp(&energy, image.width as usize, image.height as usize);
+                        let seam = backtrack_seam(&dp, image.width as usize, image.height as usize);
+                        image = insert_seam(image, &seam);
+                        println!(
+                            "Removed 1 seam. New dimensions: {}x{}",
+                            image.width, image.height
+                        );
+                    }
+                    SetWindowSize(image.width, image.height);
+                    unload_texture(texture);
+                    texture = LoadTextureFromImage(image);
+                }
+            }
+
             if is_key_pressed(KEY_S) {
                 ExportImage(image, cstr!("output.png").as_ptr());
                 println!("Saved output.png");
@@ -238,6 +256,61 @@ fn remove_seam(image: Image, seam: &[usize]) -> Image {
         UnloadImage(image);
 
         // Allocate memory for new image using Raylib's allocator
+        let byte_count = dest_pixels.len() * std::mem::size_of::<Color>();
+        let data_ptr = MemAlloc(byte_count as u32);
+        ptr::copy_nonoverlapping(
+            dest_pixels.as_ptr() as *const u8,
+            data_ptr as *mut u8,
+            byte_count,
+        );
+
+        Image {
+            data: data_ptr,
+            width: new_width as i32,
+            height: height as i32,
+            mipmaps: 1,
+            format: PixelFormat_PIXELFORMAT_UNCOMPRESSED_R8G8B8A8 as _,
+        }
+    }
+}
+
+fn insert_seam(image: Image, seam: &[usize]) -> Image {
+    unsafe {
+        let width = image.width as usize;
+        let height = image.height as usize;
+        let src_pixels = slice::from_raw_parts(image.data as *const Color, width * height);
+
+        let new_width = width + 1;
+        let mut dest_pixels: Vec<Color> = Vec::with_capacity(new_width * height);
+
+        for y in 0..height {
+            let seam_x = seam[y].min(width - 1);
+            let row_start = y * width;
+
+            // Copy pixels up to the seam
+            dest_pixels.extend_from_slice(&src_pixels[row_start..row_start + seam_x + 1]);
+
+            // Interpolate new pixel color with neighbor
+            let p1 = src_pixels[row_start + seam_x];
+            let p2 = if seam_x + 1 < width {
+                src_pixels[row_start + seam_x + 1]
+            } else {
+                p1
+            };
+            let interpolated = Color {
+                r: ((p1.r as u16 + p2.r as u16) / 2) as u8,
+                g: ((p1.g as u16 + p2.g as u16) / 2) as u8,
+                b: ((p1.b as u16 + p2.b as u16) / 2) as u8,
+                a: p1.a,
+            };
+            dest_pixels.push(interpolated);
+
+            // Copy remaining pixels in row
+            dest_pixels.extend_from_slice(&src_pixels[row_start + seam_x + 1..row_start + width]);
+        }
+
+        UnloadImage(image);
+
         let byte_count = dest_pixels.len() * std::mem::size_of::<Color>();
         let data_ptr = MemAlloc(byte_count as u32);
         ptr::copy_nonoverlapping(
